@@ -2,7 +2,9 @@ name: diskunion-avant-monitor
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "*/30 * * * *"   # 通常は30分ごと
+    - cron: "40,50 2 * * *"  # 追加: JST 11:40, 11:50
+    - cron: "10,20 3 * * *"  # 追加: JST 12:10, 12:20
   workflow_dispatch:
 
 permissions:

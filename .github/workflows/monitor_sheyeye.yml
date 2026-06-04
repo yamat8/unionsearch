@@ -1,0 +1,42 @@
+name: sheyeye-monitor
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests beautifulsoup4
+      - name: Run monitor
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python monitor_sheyeye.py
+      - name: Commit state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add state_sheyeye.json
+          git diff --staged --quiet && echo "no change" && exit 0
+          git commit -m "update sheyeye state"
+          for i in 1 2 3; do
+            git push && exit 0
+            echo "push rejected, syncing..."
+            git pull --rebase -X theirs origin main
+          done
+          git push

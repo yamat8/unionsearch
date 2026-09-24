@@ -3,10 +3,20 @@ import requests
 from bs4 import BeautifulSoup
 
 BASE = "https://diskunion.net"
-# key: (表示名, 一覧URL)
+# GeneralFormats: 1=CD 2=レコード 3=映像 4=書籍 5=その他
+# stock_condition: 9=中古在庫あり
+# key: (表示名, 一覧URL, 絞り込み条件)
 CATEGORIES = {
-    "reggae": ("REGGAE", f"{BASE}/used/reggae/new_release"),
-    "noise_avant": ("NOISE/AVANT", f"{BASE}/used/noise_avant/new_release"),
+    "reggae": ("REGGAE", f"{BASE}/used/reggae/new_release", {
+        "base_search[formats][GeneralFormats][]": ["2", "5"],
+        "base_search[stock_condition][]": ["9"],
+        "base_search[additional_keyword]": "original",
+    }),
+    "noise_avant": ("NOISE/AVANT", f"{BASE}/used/noise_avant/new_release", {
+        "base_search[formats][GeneralFormats][]": ["2", "4", "5"],
+        "base_search[stock_condition][]": ["9"],
+        "base_search[additional_keyword]": "original",
+    }),
 }
 # 3 = 中古新着順, 60件表示
 PARAMS = {"base_search[orderby]": "3", "base_search[disp_number]": "60"}
@@ -20,8 +30,8 @@ HEADERS = {
 }
 
 
-def fetch(url):
-    r = requests.get(url, params=PARAMS, headers=HEADERS, timeout=30)
+def fetch(url, filters):
+    r = requests.get(url, params={**PARAMS, **filters}, headers=HEADERS, timeout=30)
     r.raise_for_status()
     return r.text
 
@@ -102,8 +112,8 @@ def notify(label, list_url, new_items):
     ).raise_for_status()
 
 
-def check(key, label, list_url):
-    count, items = parse(fetch(list_url))
+def check(key, label, list_url, filters):
+    count, items = parse(fetch(list_url, filters))
     if not items:
         raise RuntimeError(f"{key}: no items parsed; check page structure.")
     prev = load_state(key)
@@ -120,7 +130,8 @@ def check(key, label, list_url):
     new_items = [it for it in items[:last_known] if it["id"] not in seen_set]
     save_state(key, count, ids + [s for s in seen if s not in set(ids)])
     if new_items:
-        notify(label, list_url, new_items)
+        page = requests.Request("GET", list_url, params={**PARAMS, **filters}).prepare().url
+        notify(label, page, new_items)
         print(f"[{key}] notified {len(new_items)}:\n" + "\n".join(map(fmt, new_items)))
     else:
         print(f"[{key}] no new items (total {prev.get('count')} -> {count}).")
@@ -128,9 +139,9 @@ def check(key, label, list_url):
 
 def main():
     failed = False
-    for key, (label, url) in CATEGORIES.items():
+    for key, (label, url, filters) in CATEGORIES.items():
         try:
-            check(key, label, url)
+            check(key, label, url, filters)
         except Exception as e:
             print(f"[{key}] ERROR: {e}")
             failed = True
